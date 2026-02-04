@@ -1,25 +1,17 @@
+import axios from "axios";
 import { v4 as uuidv4 } from "uuid";
-import { createTransaction } from "../models/transaction.model.js";
+import {
+  createTransaction,
+  updateTransactionStatus,
+} from "../models/transaction.model.js";
+
+const ACCOUNT_SERVICE_URL = "http://localhost:4001/api/accounts";
 
 export const initiateTransfer = async (req, res) => {
+  const { from_account, to_account, amount } = req.body;
+
   try {
-    const { from_account, to_account, amount } = req.body;
-
-    // Basic validation
-    if (!from_account || !to_account || !amount) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-
-    if (amount <= 0) {
-      return res.status(400).json({ error: "Amount must be greater than zero" });
-    }
-
-    if (from_account === to_account) {
-      return res
-        .status(400)
-        .json({ error: "Sender and receiver cannot be the same" });
-    }
-
+    //  Create PENDING transaction
     const transaction = await createTransaction({
       transaction_id: uuidv4(),
       from_account,
@@ -28,8 +20,31 @@ export const initiateTransfer = async (req, res) => {
       status: "PENDING",
     });
 
-    res.status(201).json(transaction);
+    //  Debit sender
+    await axios.post(`${ACCOUNT_SERVICE_URL}/debit`, {
+      account_id: from_account,
+      amount,
+    });
+
+    // Credit receiver
+    await axios.post(`${ACCOUNT_SERVICE_URL}/credit`, {
+      account_id: to_account,
+      amount,
+    });
+
+    // Mark SUCCESS
+    const successTxn = await updateTransactionStatus(
+      transaction.transaction_id,
+      "SUCCESS"
+    );
+
+    res.status(200).json(successTxn);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    //  Mark FAILED
+    if (err?.response) {
+      // account service rejected
+    }
+
+    res.status(500).json({ error: "Transaction failed" });
   }
 };
