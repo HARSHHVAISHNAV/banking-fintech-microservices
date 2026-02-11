@@ -6,11 +6,12 @@ export const createTransaction = async ({
   to_account,
   amount,
   status,
+  idempotency_key,
 }) => {
   const query = `
     INSERT INTO transactions
-    (transaction_id, from_account, to_account, amount, status)
-    VALUES ($1, $2, $3, $4, $5)
+    (transaction_id, from_account, to_account, amount, status, idempotency_key)
+    VALUES ($1, $2, $3, $4, $5, $6)
     RETURNING *
   `;
 
@@ -20,6 +21,7 @@ export const createTransaction = async ({
     to_account,
     amount,
     status,
+    idempotency_key,
   ];
 
   const { rows } = await db.query(query, values);
@@ -35,5 +37,13 @@ export const updateTransactionStatus = async (transaction_id, status) => {
     [status, transaction_id]
   );
 
+  return rows[0];
+};
+
+export const findByIdempotencyKey = async (key) => {
+  const { rows } = await db.query(
+    "SELECT * FROM transactions WHERE idempotency_key = $1",
+    [key]
+  );
   return rows[0];
 };
