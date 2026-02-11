@@ -41,6 +41,14 @@ export const credit = async (req, res) => {
   try {
     const { account_id, amount } = req.body;
 
+        // FAIL only for RECEIVER account (testing rollback)
+    // if (
+    //   account_id === "d31c8cde-df94-4599-afe7-762e7256c21c" &&
+    //   amount === 500
+    // ) {
+    //   throw new Error("Simulated credit failure");
+    // }
+
     const account = await creditAccount(account_id, amount);
 
     if (!account) {
