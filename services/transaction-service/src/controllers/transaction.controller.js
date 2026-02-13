@@ -6,6 +6,7 @@ import {
   findByIdempotencyKey,
 } from "../models/transaction.model.js";
 
+const FRAUD_SERVICE = "http://localhost:4003/api/fraud";
 const ACCOUNT_SERVICE = "http://localhost:4001/api/accounts";
 
 export const initiateTransfer = async (req, res) => {
@@ -34,6 +35,26 @@ export const initiateTransfer = async (req, res) => {
       status: "PENDING",
       idempotency_key: idempotencyKey,
     });
+    console.log("Running fraud check...");
+
+    const fraudResponse = await axios.post(`${FRAUD_SERVICE}/check`, {
+      from_account,
+      to_account,
+      amount,
+    });
+
+    if (!fraudResponse.data.approved) {
+      console.log("Fraud detected ");
+
+      await updateTransactionStatus(transaction.transaction_id, "FAILED");
+
+      return res.status(400).json({
+        error: "Transaction blocked by fraud detection",
+        reason: fraudResponse.data.reason,
+      });
+    }
+
+    console.log("Fraud check passed ");
 
     console.log("Transaction created:", transaction.transaction_id);
 
