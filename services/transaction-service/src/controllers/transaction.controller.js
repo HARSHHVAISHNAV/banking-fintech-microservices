@@ -6,8 +6,10 @@ import {
   findByIdempotencyKey,
 } from "../models/transaction.model.js";
 
-const FRAUD_SERVICE = "http://localhost:4003/api/fraud";
+
 const ACCOUNT_SERVICE = "http://localhost:4001/api/accounts";
+const FRAUD_SERVICE = "http://localhost:4003/api/fraud";
+const NOTIFICATION_SERVICE = "http://localhost:4004/api/notifications";
 
 export const initiateTransfer = async (req, res) => {
   const { from_account, to_account, amount } = req.body;
@@ -48,6 +50,12 @@ export const initiateTransfer = async (req, res) => {
 
       await updateTransactionStatus(transaction.transaction_id, "FAILED");
 
+      await axios.post(`${NOTIFICATION_SERVICE}/send`, {
+        account_id: from_account,
+        type: "TRANSFER_BLOCKED",
+        message: `Transfer blocked: ${fraudResponse.data.reason}`,
+      });
+
       return res.status(400).json({
         error: "Transaction blocked by fraud detection",
         reason: fraudResponse.data.reason,
@@ -81,11 +89,23 @@ export const initiateTransfer = async (req, res) => {
       transaction.transaction_id,
       "SUCCESS"
     );
+    // Notify sender
+    await axios.post(`${NOTIFICATION_SERVICE}/send`, {
+      account_id: from_account,
+      type: "TRANSFER_SUCCESS",
+      message: `₹${amount} debited successfully`,
+    });
 
+    // Notify receiver
+    await axios.post(`${NOTIFICATION_SERVICE}/send`, {
+      account_id: to_account,
+      type: "TRANSFER_RECEIVED",
+      message: `₹${amount} received from account ${from_account}`,
+    });
     return res.json(successTxn);
 
   } catch (error) {
-    console.log("Transfer failed ❌");
+    console.log("Transfer failed ");
 
     // COMPENSATION STEP (Refund sender if debit happened)
     try {
@@ -98,13 +118,18 @@ export const initiateTransfer = async (req, res) => {
         console.log("Refund completed");
       }
     } catch (refundError) {
-      console.log("Refund FAILED — manual intervention required 🚨");
+      console.log("Refund FAILED — manual intervention required ");
     }
 
     // Mark transaction FAILED
     if (transaction) {
       await updateTransactionStatus(transaction.transaction_id, "FAILED");
     }
+    await axios.post(`${NOTIFICATION_SERVICE}/send`, {
+      account_id: from_account,
+      type: "TRANSFER_FAILED",
+      message: "Transfer failed and money was refunded",
+    });
 
     return res.status(500).json({
       error: "Transaction failed and was rolled back",
