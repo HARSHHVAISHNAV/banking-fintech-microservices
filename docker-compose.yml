@@ -10,7 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql  # ← moved here
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql # ← moved here
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -34,12 +34,26 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+  auth-service:
+    build: ./services/auth-service
+    ports:
+      - "4005:4005"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: banking
+      JWT_SECRET: supersecretkey123
+    depends_on:
+      - postgres
 
   account-service:
     build: ./services/account-service
     ports:
       - "4001:4001"
     environment:
+      JWT_SECRET: supersecretkey123
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
@@ -53,6 +67,7 @@ services:
     ports:
       - "4002:4002"
     environment:
+      JWT_SECRET: supersecretkey123
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: postgres
@@ -73,6 +88,17 @@ services:
     build: ./services/notification-service
     ports:
       - "4004:4004"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile 
+    ports:
+      - "80:80"
+    depends_on:
+      - account-service
+      - transaction-service
+      - auth-service
 
 # ← this must be at root level, zero indentation
 volumes:
